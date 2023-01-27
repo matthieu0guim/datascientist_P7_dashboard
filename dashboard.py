@@ -4,6 +4,8 @@ import seaborn as sns
 import plotly.express as px
 import requests
 
+# to deploye locally : streamlit run dashboard.py
+
 df = pd.read_csv("utils_features.csv")
 
 st.title("Estimation de la solvabilité du crédit d'un client")
@@ -15,8 +17,12 @@ st.sidebar.title("Action possibles")
 # Function to enter the client id et get a response from model
 def predict_solvability():
     st.write("Entrez le numéro de demande du client")
-    client_id = st.number_input("Numéro de demande")
-    r = requests.get(f"https://dsp7-guimard-matthieu.azurewebsites.net/predict?customer={client_id}")
+    client_id = st.number_input("Numéro de demande", format="%u")
+    r = requests.get(f"https://dsp7-guimard-matthieu.azurewebsites.net/predict?customer={int(client_id)}")
     if r.status_code == 200:
-        print("Votre client existe !")
+        st.write("Votre client existe !")
 
+st.sidebar.subheader("sélectionner un client")
+to_predict =st.sidebar.checkbox("renseigner un numéro de demande")
+if to_predict:
+    predict_solvability()
