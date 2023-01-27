@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import seaborn as sns
 import plotly.express as px
+import requests
 
 df = pd.read_csv("utils_features.csv")
 
@@ -15,5 +16,7 @@ st.sidebar.title("Action possibles")
 def predict_solvability():
     st.write("Entrez le numéro de demande du client")
     client_id = st.number_input("Numéro de demande")
-    
+    r = requests.get(f"https://dsp7-guimard-matthieu.azurewebsites.net/predict?customer={client_id}")
+    if r.status_code == 200:
+        print("Votre client existe !")
 
