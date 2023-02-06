@@ -19,7 +19,7 @@ model = pickle.load(pickle_in)
 
 df = pd.read_csv("utils_features.csv")
 df.set_index("SK_ID_CURR", inplace=True)
-print(df['AMT_CREDIT'])
+# print(df['AMT_CREDIT'])
 explainer = lime_tabular.LimeTabularExplainer(
     df.drop(columns={'TARGET'}).to_numpy(),
     mode='classification',
@@ -36,9 +36,10 @@ st.sidebar.title("Action possibles")
 # Function to enter the client id et get a response from model
 def predict_solvability():
     st.write("Entrez le numéro de demande du client")
-    client_id = st.number_input("Numéro de demande", format="%u")
+    # client_id = st.number_input("Numéro de demande", format="%u")
+    client_id = st.selectbox("Numéro de demande:", df.index.tolist())
     r = requests.post(f"https://dsp7-guimard-matthieu.azurewebsites.net/predict?customer={int(client_id)}")
-    print(r.text)
+    # print(r.text)
     if r.status_code == 200:
         st.write("Votre client existe !")
         st.write(f"Votre indice de solvabilité est de {r.json()['probabilité']}. Votre crédit est {r.json()['prediction']}")
@@ -62,7 +63,7 @@ def show_interpretability(client_id, prediction):
         real_value[df_feature] = df[df_feature].iloc[int(client_id)]
     local_importance = pd.DataFrame(idx_importance, index=[client_id]).fillna(0)
     real_df = pd.DataFrame(real_value, index=[client_id]).fillna(0)
-    print(f"real_df:{real_df}")
+    # print(f"real_df:{real_df}")
 
     st.write("Importance des variables")
     st.plotly_chart(px.bar(local_importance.iloc[0].sort_values(ascending=False)))
