@@ -33,13 +33,35 @@ st.markdown("Vous pouvez également lui expliquer la qualité de son profil au r
 
 st.sidebar.title("Action possibles")
 
+# function to get only customers beeing in the dataset sample in api
+def filter_dataframe(df):
+    print(df.index)
+    # API
+    # r = requests.get("https://dsp7-guimard-matthieu.azurewebsites.net/data")
+    # local
+    r = requests.get("http://127.0.0.1:8000/data")
+    # print(r.json()["customers"])
+    api_users = r.json()["customers"]
+    users = df.index
+    to_keep =  []
+    for user in users:
+        if user in api_users:
+            to_keep.append(user)
+    df = df.loc[to_keep]
+    return df
+
+
 # Function to enter the client id et get a response from model
-def predict_solvability():
+def predict_solvability(data):
     st.write("Entrez le numéro de demande du client")
     # client_id = st.number_input("Numéro de demande", format="%u")
-    client_id = st.selectbox("Numéro de demande:", df.index.tolist())
-    r = requests.post(f"https://dsp7-guimard-matthieu.azurewebsites.net/predict?customer={int(client_id)}")
-    # print(r.text)
+    client_id = st.selectbox("Numéro de demande:", data.index.tolist())
+    # cloud
+    # r = requests.post(f"https://dsp7-guimard-matthieu.azurewebsites.net/predict?customer={int(client_id)}")
+    # local 
+    r =requests.post(f"http://127.0.0.1:8000/predict?customer={int(client_id)}")
+    print(f"Client sélectionné: {int(client_id)}")
+    print(f"réponse requête: {r.text}")
     if r.status_code == 200:
         st.write("Votre client existe !")
         st.write(f"Votre indice de solvabilité est de {r.json()['probabilité']}. Votre crédit est {r.json()['prediction']}")
@@ -72,7 +94,10 @@ def show_interpretability(client_id, prediction):
     
 
 st.sidebar.subheader("sélectionner un client")
-to_predict =st.sidebar.checkbox("renseigner un numéro de demande")
+to_predict = st.sidebar.checkbox("renseigner un numéro de demande")
+
+data = filter_dataframe(df)
+print(data.shape)
 
 if to_predict:
-    predict_solvability()
+    predict_solvability(data)
