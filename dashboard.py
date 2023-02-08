@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 from matplotlib.transforms import Affine2D
 import mpl_toolkits.axisartist.floating_axes as floating_axes
 import plotly.express as px
+import plotly.graph_objects as go
 
 
 # to deploye locally : streamlit run dashboard.py
@@ -37,9 +38,9 @@ st.sidebar.title("Action possibles")
 def filter_dataframe(df):
     print(df.index)
     # API
-    # r = requests.get("https://dsp7-guimard-matthieu.azurewebsites.net/data")
+    r = requests.get("https://dsp7-guimard-matthieu.azurewebsites.net/data")
     # local
-    r = requests.get("http://127.0.0.1:8000/data")
+    # r = requests.get("http://127.0.0.1:8000/data")
     # print(r.json()["customers"])
     api_users = r.json()["customers"]
     users = df.index
@@ -57,13 +58,21 @@ def predict_solvability(data):
     # client_id = st.number_input("Numéro de demande", format="%u")
     client_id = st.selectbox("Numéro de demande:", data.index.tolist())
     # cloud
-    # r = requests.post(f"https://dsp7-guimard-matthieu.azurewebsites.net/predict?customer={int(client_id)}")
+    r = requests.post(f"https://dsp7-guimard-matthieu.azurewebsites.net/predict?customer={int(client_id)}")
     # local 
-    r =requests.post(f"http://127.0.0.1:8000/predict?customer={int(client_id)}")
+    # r =requests.post(f"http://127.0.0.1:8000/predict?customer={int(client_id)}")
     print(f"Client sélectionné: {int(client_id)}")
     print(f"réponse requête: {r.text}")
     if r.status_code == 200:
         st.write("Votre client existe !")
+        fig = go.Figure(go.Indicator(
+            mode='gauge+number',
+            gauge={'axis' : {'range': [0, 100]}},
+            value=float(r.json()['probabilité'])*100,
+            title = {'text': "Probabilité de solvabilité"},
+            domain = {'x': [0,1], 'y': [0,1]}
+        ))
+        st.plotly_chart(fig, use_container_width=True)
         st.write(f"Votre indice de solvabilité est de {r.json()['probabilité']}. Votre crédit est {r.json()['prediction']}")
         further_data = st.checkbox("Avoir plus de détails sur le résultat de la simulation.")
         if further_data:
