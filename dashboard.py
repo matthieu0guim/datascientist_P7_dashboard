@@ -15,8 +15,7 @@ import streamlit.components.v1 as components
 
 # to deploye locally : streamlit run dashboard.py
 
-pickle_in = open('loan_risk_model.pkl', 'rb')
-model = pickle.load(pickle_in)
+
 
 df = pd.read_csv("client_info.csv")
 df.set_index("SK_ID_CURR", inplace=True)
