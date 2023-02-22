@@ -1,16 +1,21 @@
 import streamlit as st
 import pandas as pd
 import seaborn as sns
+import numpy as np
 import plotly.express as px
 import requests
 from lime import lime_tabular 
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
+import matplotlib
 from matplotlib.transforms import Affine2D
 import mpl_toolkits.axisartist.floating_axes as floating_axes
 import plotly.express as px
 import plotly.graph_objects as go
+import shap
+import streamlit.components.v1 as components
+
 
 
 # to deploye locally : streamlit run dashboard.py
@@ -18,15 +23,8 @@ import plotly.graph_objects as go
 pickle_in = open('loan_risk_model.pkl', 'rb')
 model = pickle.load(pickle_in)
 
-df = pd.read_csv("utils_features.csv")
+df = pd.read_csv("client_info.csv")
 df.set_index("SK_ID_CURR", inplace=True)
-# print(df['AMT_CREDIT'])
-explainer = lime_tabular.LimeTabularExplainer(
-    df.drop(columns={'TARGET'}).to_numpy(),
-    mode='classification',
-    class_names=df['TARGET'].unique(),
-    feature_names = np.array(df.drop(columns={'TARGET'}).columns.tolist())
-)
 
 st.title("Estimation de la solvabilité du crédit d'un client")
 st.markdown("Cet interface vous permert de rentrer l'identité d'un client pour consulter son dossier et estimer son potentiel de solvabilité.")
@@ -34,79 +32,110 @@ st.markdown("Vous pouvez également lui expliquer la qualité de son profil au r
 
 st.sidebar.title("Action possibles")
 
-# function to get only customers beeing in the dataset sample in api
-def filter_dataframe(df):
-    print(df.index)
-    # API
-    r = requests.get("https://dsp7-guimard-matthieu.azurewebsites.net/data")
-    # local
-    # r = requests.get("http://127.0.0.1:8000/data")
-    # print(r.json()["customers"])
-    api_users = r.json()["customers"]
-    users = df.index
-    to_keep =  []
-    for user in users:
-        if user in api_users:
-            to_keep.append(user)
-    df = df.loc[to_keep]
-    return df
 
 
 # Function to enter the client id et get a response from model
 def predict_solvability(data):
     st.write("Entrez le numéro de demande du client")
-    # client_id = st.number_input("Numéro de demande", format="%u")
     client_id = st.selectbox("Numéro de demande:", data.index.tolist())
+    submit_button = st.checkbox('lancer')
     # cloud
-    r = requests.post(f"https://dsp7-guimard-matthieu.azurewebsites.net/predict?customer={int(client_id)}")
+    if submit_button:
+        r = requests.post(f"https://dsp7-guimard-matthieu.azurewebsites.net/predict?customer={int(client_id)}")
     # local 
     # r =requests.post(f"http://127.0.0.1:8000/predict?customer={int(client_id)}")
-    print(f"Client sélectionné: {int(client_id)}")
-    print(f"réponse requête: {r.text}")
-    if r.status_code == 200:
-        st.write("Votre client existe !")
-        fig = go.Figure(go.Indicator(
-            mode='gauge+number',
-            gauge={'axis' : {'range': [0, 100]}},
-            value=float(r.json()['probabilité'])*100,
-            title = {'text': "Probabilité de solvabilité"},
-            domain = {'x': [0,1], 'y': [0,1]}
-        ))
-        st.plotly_chart(fig, use_container_width=True)
-        st.write(f"Votre indice de solvabilité est de {r.json()['probabilité']}. Votre crédit est {r.json()['prediction']}")
-        further_data = st.checkbox("Avoir plus de détails sur le résultat de la simulation.")
-        if further_data:
-            show_interpretability(client_id, r)
-    else:
-        st.write("Le numéro renseigné n'apparait pas dans la base de données.")
+        if r.status_code == 200:
+            if float(r.json()['probabilité']) < 0.5:
+                color = 'red'
+            else:
+                color = 'green'
+            fig = go.Figure(go.Indicator(
+                mode='gauge+number',
+                gauge={'axis' : {'range': [0, 100]},
+                       'bar': {'color': color}},
+                value=float(r.json()['probabilité'])*100,
+                title = {'text': "Probabilité de solvabilité",
+                         "font": {"size":20}},
+                domain = {'x': [0,1], 'y': [0,1]},
+            ))
+            st.plotly_chart(fig, use_container_width=True)
+            st.write(f"Votre indice de solvabilité est de {r.json()['probabilité']}. Votre crédit est {r.json()['prediction']}")
+            st.write("Informations générales du client")
+            table = show_table(client_id)
+            st.write("Quelques graphiques:")
+            
+            
+            # | go.Indicator(value=df.loc[297172][to_graphes[0]])
+            st.dataframe(table)
+            show_bar(client_id)
+            distribution = st.selectbox("Comparer le dossier au reste des clients.", data.columns.tolist())
+            if distribution:
+                show_distribution(client_id, distribution, data)
+            further_data = st.checkbox("Avoir plus de détails sur le résultat de la simulation.")
+            if further_data:
+                show_interpretability(client_id)
+        else:
+            st.write("Le numéro renseigné n'apparait pas dans la base de données.")
+        
+
+def st_shap(plot, height=None):
+    shap_html = f"<head>{shap.getjs()}</head><body>{plot.html()}</body>"
+    components.html(shap_html, height=height)
+
+def show_interpretability(client_id):
+    r = requests.get(f"https://dsp7-guimard-matthieu.azurewebsites.net/interpretability?client_id={client_id}").json()
+    st.set_option('deprecation.showPyplotGlobalUse', False)
     
+    st.write(f"client : {client_id}")
 
-def show_interpretability(client_id, prediction):
-    explanation = explainer.explain_instance(
-        np.array(df.drop(columns={'TARGET'}).iloc[int(client_id)]),
-        model._model_impl.predict_proba,
-    )
-    idx_importance = {}
-    real_value = {}
-    for feature in explanation.local_exp[1]:
-        df_feature = df.drop(columns={"TARGET"}).columns.tolist()[feature[0]]
-        idx_importance[df_feature] = feature[1]
-        real_value[df_feature] = df[df_feature].iloc[int(client_id)]
-    local_importance = pd.DataFrame(idx_importance, index=[client_id]).fillna(0)
-    real_df = pd.DataFrame(real_value, index=[client_id]).fillna(0)
-    # print(f"real_df:{real_df}")
+    shap.decision_plot(r["expected_value"], np.array(r[f"client_{client_id}_interpretability"]), feature_names=r["feature_names"], return_objects=True)
+    st.pyplot(bbox_inches='tight')
+    plt.clf()
 
-    st.write("Importance des variables")
-    st.plotly_chart(px.bar(local_importance.iloc[0].sort_values(ascending=False)))
-    st.write("Valeur réelles des variables")
-    st.plotly_chart(px.bar(real_df.iloc[0]))
+    shap.bar_plot(np.array(r[f"client_{client_id}_interpretability"]),
+                  feature_names=r["feature_names"])
+    st.pyplot(bbox_inches='tight')
+    plt.clf()
     
+    shap.force_plot(r["expected_value"], np.array(r[f"client_{client_id}_interpretability"]), feature_names=r["feature_names"])
+    st.pyplot(bbox_inches="tight")
+    plt.clf()
 
+    
+def show_table(client_id):
+    table = ['FLAG_OWN_CAR', 'NAME_EDUCATION_TYPE_Highereducation', 'REGION_RATING_CLIENT', 'INSTAL_DPD_MAX']
+    tableau = {"Vous possédez une voiture" : "", "Plus haut niveau d'étude" : "", "Attractivité du lieu de vie" : "", "Retards de remboursement" : ""}
+    info_client = df.loc[client_id]
+    for column in table:
+        if column == "FLAG_OWN_CAR":
+            if info_client[column] == 0.0:
+                tableau["Vous possédez une voiture"] = "NON"
+            else:
+                tableau["Vous possédez une voiture"] = "OUI"
+        elif column == "NAME_EDUCATION_TYPE_Highereducation":
+            tableau["Plus haut niveau d'étude"] = info_client[column]
+        elif column == "REGION_RATING_CLIENT":
+            tableau["Attractivité du lieu de vie"] = info_client[column]
+        elif column == "INSTAL_DPD_MAX":
+            tableau["Retards de remboursement"] = info_client[column]
+    return pd.DataFrame([tableau])
+
+def show_bar(client_id):
+    to_graphes = ['PAYMENT_RATE', 'AMT_CREDIT', 'AMT_ANNUITY', 'AMT_GOODS_PRICE']
+    st.plotly_chart([go.Bar(y=df.loc[client_id][to_graphes[1:]].values, x=to_graphes[1:])])
+    st.title("Taux de remboursement mensuel")
+    st.plotly_chart([go.Indicator(value = df.loc[client_id][to_graphes[0]] * 100 )])
+
+def show_distribution(client_id, var, data):
+    client_value = data.loc[client_id][var]
+    st.write(f"Votre valeur est de ")
+    fig1 = px.histogram(data, x=var, color='TARGET', marginal='box')
+    fig1.add_vline(x=client_value)
+    st.plotly_chart(fig1)
+    
 st.sidebar.subheader("sélectionner un client")
 to_predict = st.sidebar.checkbox("renseigner un numéro de demande")
 
-data = filter_dataframe(df)
-print(data.shape)
 
 if to_predict:
-    predict_solvability(data)
+    predict_solvability(df)
