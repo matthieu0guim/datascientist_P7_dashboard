@@ -39,7 +39,7 @@ def predict_solvability(data):
     # local 
     # r =requests.post(f"http://127.0.0.1:8000/predict?customer={int(client_id)}")
         if r.status_code == 200:
-            if float(r.json()['probabilité']) < 0.5:
+            if float(r.json()['probabilité']) < 0.48:
                 color = 'red'
             else:
                 color = 'green'
@@ -54,15 +54,15 @@ def predict_solvability(data):
             ))
             st.plotly_chart(fig, use_container_width=True)
             st.write(f"Votre indice de solvabilité est de {r.json()['probabilité']}. Votre crédit est {r.json()['prediction']}")
-            st.write("Informations générales du client")
+            st.title("Informations générales du client")
             table = show_table(client_id)
-            st.write("Quelques graphiques:")
+            st.title("Quelques graphiques:")
             
             
             # | go.Indicator(value=df.loc[297172][to_graphes[0]])
             st.dataframe(table)
             show_bar(client_id)
-            distribution = st.selectbox("Comparer le dossier au reste des clients.", data.columns.tolist())
+            distribution = st.selectbox("Comparer le dossier au reste des clients.", data.drop(columns=['EXT_SOURCE_3', "EXT_SOURCE_2"]).columns.tolist())
             if distribution:
                 show_distribution(client_id, distribution, data)
             further_data = st.checkbox("Avoir plus de détails sur le résultat de la simulation.")
@@ -91,9 +91,9 @@ def show_interpretability(client_id):
     st.pyplot(bbox_inches='tight')
     plt.clf()
     
-    shap.force_plot(r["expected_value"], np.array(r[f"client_{client_id}_interpretability"]), feature_names=r["feature_names"])
-    st.pyplot(bbox_inches="tight")
-    plt.clf()
+    # shap.force_plot(r["expected_value"], np.array(r[f"client_{client_id}_interpretability"]), feature_names=r["feature_names"])
+    # st.pyplot(bbox_inches="tight")
+    # plt.clf()
 
     
 def show_table(client_id):
@@ -122,8 +122,8 @@ def show_bar(client_id):
 
 def show_distribution(client_id, var, data):
     client_value = data.loc[client_id][var]
-    st.write(f"Votre valeur est de ")
-    fig1 = px.histogram(data, x=var, color='TARGET', marginal='box')
+    st.title(f"Valeur client : {np.round(client_value,2)}")
+    fig1 = px.histogram(data, x=var, color='TARGET', marginal='box', nbins=20)
     fig1.add_vline(x=client_value)
     st.plotly_chart(fig1)
     
